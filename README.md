@@ -1,17 +1,14 @@
-# AI Career Copilot
-
-全栈 AI 求职助手平台，涵盖简历智能生成、JD 分析、简历定制、面试准备和 AI 模拟面试六大模块。
+全栈 AI 求职助手平台，涵盖 AI 简历助手、JD 分析、简历定制、AI 模拟面试和简历导出五大模块。
 
 ## 功能模块
 
 | 模块 | 说明 |
 |------|------|
-| **AI 简历助手** | 8 阶段状态机引导用户逐步完成专业简历，数据驱动章节推进，实时 WebSocket 预览 |
-| **简历导入** | 支持上传 PDF/DOCX 文件，AI 自动解析并提取结构化简历数据 |
+| **AI 简历助手** | AI 对话式引导构建简历，实时 WebSocket 预览，数据自动提取与更新，支持导入简历继续完善 |
 | **JD 分析** | 输入职位描述，AI 分析关键技能要求、软实力需求和薪资范围 |
 | **简历定制** | 根据目标 JD 自动优化简历内容，突出匹配技能和量化成果 |
-| **面试准备** | 基于简历和目标岗位，AI 生成个性化面试题目和参考回答 |
-| **模拟面试** | WebSocket 驱动的实时对话式 AI 面试，支持追问和深度评估 |
+| **AI 模拟面试** | WebSocket 驱动的实时对话式 AI 面试，支持追问和深度评估 |
+| **简历导出** | 一键导出 PDF/DOCX 格式简历，支持多种排版模板 |
 
 ## 技术栈
 
@@ -20,7 +17,7 @@
 | **前端** | Next.js 14 (App Router) · React 18 · TypeScript · TailwindCSS · shadcn/ui · Zustand · TanStack Query |
 | **后端** | FastAPI · async SQLAlchemy 2.0 · Celery · Pydantic v2 |
 | **AI** | DeepSeek API (OpenAI SDK 兼容) |
-| **数据库** | PostgreSQL 16 (含 pgvector 扩展) |
+| **数据库** | PostgreSQL 16 |
 | **缓存/队列** | Redis |
 | **实时通信** | WebSocket |
 | **认证** | JWT 双 Token (access + refresh) |
@@ -52,9 +49,8 @@ Nginx (:80) ──┬── /api/*  ──►  Backend (:8000) ──► Postgre
 ### Docker 部署（推荐）
 
 ```bash
-# 1. 克隆项目
-git clone <repository-url>
-cd ai-career-copilot/docker
+# 1. 进入 docker 目录
+cd docker
 
 # 2. 配置环境变量
 cat > .env << 'EOF'
@@ -122,7 +118,6 @@ npm run dev
 | POST | `/api/v1/resumes/import` | 导入简历文件 |
 | POST | `/api/v1/jd-analysis` | 分析职位描述 |
 | POST | `/api/v1/tailor` | 定制简历 |
-| POST | `/api/v1/interview/prep` | 生成面试准备 |
 | POST | `/api/v1/export/resume/{id}/{format}/sync` | 导出简历 (PDF/DOCX) |
 | WS | `/ws/resume/{id}` | AI 简历助手 WebSocket |
 | WS | `/ws/interview/{id}` | 模拟面试 WebSocket |
@@ -133,14 +128,15 @@ npm run dev
 ai-career-copilot/
 ├── backend/
 │   ├── app/
-│   │   ├── ai/              # AI 代理、Prompt、状态机
+│   │   ├── ai/              # AI 代理、Prompt
+│   │   │   └── prompts/     # System prompt 文件
 │   │   ├── api/v1/          # REST API 路由
 │   │   ├── core/            # 配置、安全、异常
 │   │   ├── models/          # SQLAlchemy 模型
 │   │   ├── schemas/         # Pydantic 校验
 │   │   ├── services/        # 业务逻辑
 │   │   ├── tasks/           # Celery 异步任务
-│   │   ├── utils/           # 工具函数
+│   │   ├── utils/           # 工具函数（含文档生成）
 │   │   └── websocket/       # WebSocket 路由
 │   ├── alembic/             # 数据库迁移
 │   └── requirements.txt
@@ -176,14 +172,30 @@ certbot certonly --standalone -d your-domain.com
 docker-compose -f docker-compose.prod.yml up -d --build
 ```
 
-详细部署步骤见部署方案文档。
+## AI 简历助手设计
 
-## AI 状态机设计
+采用**无状态全量提取**架构，彻底消除传统状态机带来的阶段不同步、数据丢失等问题。
 
-AI 简历助手采用纯数据驱动的 8 阶段状态机：`intro → basic_info → job_target → education → skills → projects → work_experience → review`。
+### 两阶段处理流程
 
-核心设计原则：
-- **数据驱动**：章节推进由 `collected_data` 的实际状态决定，AI 文本输出不参与控制
-- **只进不退**：`if i > current_idx` → 绝不回退到已完成章节
-- **类型校验**：list section 必须是非空数组才标记完成，字符串/空值会被拒绝存储
-- **多层容错**：JSON 解析 → 结构修复 → 后备生成，应对 AI 输出的非确定性
+```
+用户消息
+  │
+  ├─ Phase 1: 对话生成（流式推送至前端）
+  │     AI 以职业规划师身份自然引导对话
+  │     覆盖基本信息、求职意向、教育、技能、项目、工作经历
+  │
+  └─ Phase 2: 全量数据提取（json_object 模式，temperature=0.1）
+        输入: 完整对话历史 + 当前完整简历数据
+        输出: 全部 6 个章节的 JSON
+        └─ 替换预览面板数据（复制旧值 + 更新新值）
+```
+
+### 核心设计原则
+
+- **无状态机**：不跟踪"当前章节"——用户可随时讨论任何话题，AI 始终输出完整简历状态
+- **数据即状态**：进度条完全从 `collected_data` 派生，不依赖额外的状态变量
+- **全量替换**：Phase 2 输出完整快照（复制旧值 + 更新新值），保证预览面板数据始终完整一致
+- **AI 看到现有数据**：提取 prompt 传入当前完整简历数据，AI 知道哪些字段已填充，只更新用户提及的变更
+- **高质量提取**：`response_format={"type": "json_object"}` + `temperature=0.1` 确保 JSON 输出可靠
+

@@ -11,6 +11,9 @@ class ConnectionManager:
             self._connections[user_id] = []
         self._connections[user_id].append(websocket)
 
+    def get_connections(self, user_id: str) -> list[WebSocket]:
+        return self._connections.get(user_id, [])
+
     def disconnect(self, user_id: str, websocket: WebSocket) -> None:
         if user_id in self._connections:
             self._connections[user_id] = [ws for ws in self._connections[user_id] if ws != websocket]

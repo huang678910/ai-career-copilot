@@ -3,7 +3,10 @@
     "allow": [
       "Bash(curl -s -X POST http://localhost:8004/api/v1/auth/register -H \"Content-Type: application/json\" -d \"{\\\\\"email\\\\\":\\\\\"gen@test.com\\\\\",\\\\\"password\\\\\":\\\\\"gen123456\\\\\",\\\\\"name\\\\\":\\\\\"GenTest\\\\\"}\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'OK: {len\\(d\\)} questions' if isinstance\\(d,list\\) else d\\)\")",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(python -c \"from app.api.v1.export import *; print\\('Export OK'\\)\")",
+      "Bash(python -c \"from app.utils.document_gen import build_html_resume, build_docx_resume; print\\('DocGen OK'\\)\")",
+      "Bash(python -c \"from app.ai.resume_agent import GuidedResumeAgent; print\\('Agent OK'\\)\")"
     ]
   }
 }

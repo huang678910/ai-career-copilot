@@ -1,15 +1,14 @@
-version: "3.8"
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
     container_name: career-copilot-db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: career_copilot
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,8 +20,9 @@ services:
   redis:
     image: redis:7.4-alpine
     container_name: career-copilot-redis
+    restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -34,8 +34,9 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     container_name: career-copilot-api
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8004:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,13 +53,14 @@ services:
     volumes:
       - media_data:/app/media
     command: >
-      sh -c "alembic upgrade head && gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000"
+      sh -c "alembic upgrade head && gunicorn -w 1 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000 --timeout 180 --graceful-timeout 30"
 
   celery_worker:
     build:
       context: ../backend
       dockerfile: Dockerfile
     container_name: career-copilot-worker
+    restart: unless-stopped
     depends_on:
       - postgres
       - redis
@@ -76,6 +78,7 @@ services:
       context: ../backend
       dockerfile: Dockerfile
     container_name: career-copilot-beat
+    restart: unless-stopped
     depends_on:
       - postgres
       - redis
@@ -88,9 +91,12 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://backend:8000
     container_name: career-copilot-ui
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - backend
     environment:
@@ -99,6 +105,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: career-copilot-nginx
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:

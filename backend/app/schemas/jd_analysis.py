@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class JDAnalysisRequest(BaseModel):
-    raw_text: str = Field(min_length=10, max_length=10000)
+    raw_text: str = Field(min_length=5, max_length=10000)
 
 
 class JDAnalysisResponse(BaseModel):

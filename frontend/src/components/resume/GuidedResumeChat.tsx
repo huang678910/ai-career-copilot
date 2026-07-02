@@ -8,9 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useResumeStore } from "@/stores/resume-store";
 import { apiClient } from "@/lib/api-client";
 
-const WS_BASE = typeof window !== "undefined"
-  ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`
-  : "ws://localhost:8004";
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8004";
 
 const SECTIONS = [
   { key: "basic_info", label: "基本信息", icon: "📋" },

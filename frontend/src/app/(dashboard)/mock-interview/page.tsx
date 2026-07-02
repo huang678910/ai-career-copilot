@@ -139,12 +139,15 @@ export default function MockInterviewPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {s.status === "completed" && s.overall_score && (
-                    <Badge variant={s.overall_score >= 70 ? "success" : s.overall_score >= 50 ? "warning" : "destructive"}>
+                    <Badge variant="outline" style={{
+                      color: +(s.overall_score) >= 70 ? "#16a34a" : +(s.overall_score) >= 50 ? "#d97706" : "#dc2626",
+                      borderColor: +(s.overall_score) >= 70 ? "#16a34a" : +(s.overall_score) >= 50 ? "#d97706" : "#dc2626"
+                    }}>
                       <BarChart3 className="mr-1 h-3 w-3" />
                       {Math.round(s.overall_score)}分
                     </Badge>
                   )}
-                  <Badge variant={s.status === "completed" ? "secondary" : s.status === "in_progress" ? "default" : "outline"}>
+                  <Badge variant={s.status === "completed" ? "default" : s.status === "in_progress" ? "secondary" : "outline"}>
                     {statusLabels[s.status] || s.status}
                   </Badge>
                   <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" onClick={async (e) => {

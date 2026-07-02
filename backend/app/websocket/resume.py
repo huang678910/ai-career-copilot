@@ -67,11 +67,12 @@ async def resume_chat(websocket: WebSocket, resume_id: uuid.UUID):
                     )
                     data = resume_agent.get_collected_data(session_id)
                     if data:
-                        await _save_guided_data(resume_id, data)
-                        await _sync_resume_fields(resume_id, data)
+                        # Send to frontend FIRST, then persist
                         await manager.send_personal_message(
                             {"type": "resume_update", "data": data}, websocket
                         )
+                        await _save_guided_data(resume_id, data)
+                        await _sync_resume_fields(resume_id, data)
                         if data.get("summary"):
                             await manager.send_personal_message(
                                 {"type": "resume_ready", "data": data}, websocket
@@ -101,7 +102,10 @@ async def resume_chat(websocket: WebSocket, resume_id: uuid.UUID):
                         )
                         history_msgs = result.scalars().all()
                 except Exception:
-                    pass
+                    import logging
+                    logging.getLogger("resume_ws").warning(
+                        "Failed to load chat history for resume %s", resume_id
+                    )
 
                 resume_agent.init_silent(session_id, merged, history_msgs)
 
@@ -150,11 +154,12 @@ async def resume_chat(websocket: WebSocket, resume_id: uuid.UUID):
 
                     data = resume_agent.get_collected_data(session_id)
                     if data:
-                        await _save_guided_data(resume_id, data)
-                        await _sync_resume_fields(resume_id, data)
+                        # Send to frontend FIRST, then persist
                         await manager.send_personal_message(
                             {"type": "resume_update", "data": data}, websocket
                         )
+                        await _save_guided_data(resume_id, data)
+                        await _sync_resume_fields(resume_id, data)
 
                     # Generate summary when all 6 sections have data
                     all_completed = len(progress.get("completed", [])) >= 6
@@ -324,7 +329,10 @@ async def _save_resume_chat(resume_id: uuid.UUID, user_id: str, role: str, conte
             db.add(msg)
             await db.commit()
     except Exception:
-        pass
+        import logging
+        logging.getLogger("resume_ws").warning(
+            "_save_resume_chat failed for resume %s user %s", resume_id, user_id
+        )
 
 
 async def _save_guided_data(resume_id: uuid.UUID, data: dict):

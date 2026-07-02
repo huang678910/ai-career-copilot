@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import router as v1_router
 from app.core.config import settings
 from app.core.exceptions import AppException, app_exception_handler
+from app.core.rate_limit import RateLimitMiddleware
 from app.websocket.resume import router as ws_resume_router
 from app.websocket.interview import router as ws_interview_router
 
@@ -22,6 +23,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS.split(","),

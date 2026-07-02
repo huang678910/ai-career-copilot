@@ -16,7 +16,13 @@ async def analyze_jd(
     current_user: User = Depends(get_current_user),
     service: JDService = Depends(JDService),
 ):
-    return await service.analyze(user_id=current_user.id, raw_text=request.raw_text)
+    try:
+        return await service.analyze(user_id=current_user.id, raw_text=request.raw_text)
+    except Exception as e:
+        from fastapi import HTTPException
+        import logging
+        logging.getLogger("jd_analysis").exception("JD analysis failed")
+        raise HTTPException(status_code=500, detail=f"JD analysis failed: {str(e)}")
 
 
 @router.get("", response_model=list[JDAnalysisResponse])

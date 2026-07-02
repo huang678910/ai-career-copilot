@@ -13,7 +13,7 @@ class TailoredResume(Base, UUIDMixin, TimestampMixin):
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     source_resume_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False
     )
     jd_analysis_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("jd_analysis.id"), nullable=False

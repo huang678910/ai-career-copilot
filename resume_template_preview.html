@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>简历模版预览 - 新版</title>
+<style>
+  /* Simulate A4 page for preview */
+  body {
+    background: #e8e8e8;
+    margin: 0;
+    padding: 32px 0;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    margin-bottom: 32px;
+    padding: 0;
+    page-break-after: always;
+    position: relative;
+  }
+  /* ====== PDF兼容核样式（以下CSS全部兼容xhtml2pdf） ====== */
+  .resume-container {
+    width: 100%;
+  }
+  /* --- Header: 深色顶栏 + 姓名/联系信息 --- */
+  .header-bar {
+    background-color: #1a365d;
+    color: #fff;
+    padding: 18px 24px;
+  }
+  .header-bar table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .header-bar td.name-col {
+    vertical-align: middle;
+  }
+  .header-bar td.photo-col {
+    width: 85px;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .photo-box {
+    width: 75px;
+    height: 95px;
+    border: 1px solid #4a6a8a;
+    background-color: #2a4a6a;
+    text-align: center;
+    vertical-align: middle;
+    color: #8aafcf;
+    font-size: 7.5pt;
+    display: table-cell;
+  }
+  .header-name {
+    font-size: 22pt;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #fff;
+    margin: 0 0 4px 0;
+  }
+  .header-title {
+    font-size: 10.5pt;
+    color: #a3c2e6;
+    margin: 0 0 6px 0;
+  }
+  .header-contact {
+    font-size: 8.5pt;
+    color: #c5d5e8;
+    margin: 0;
+  }
+  .header-contact span {
+    margin-right: 16px;
+  }
+
+  /* --- 页面主要内容区 --- */
+  .content-area {
+    padding: 20px 24px 16px 24px;
+  }
+
+  /* --- Section 标题样式 --- */
+  .section {
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+  }
+  .section h2 {
+    font-size: 12pt;
+    font-weight: 700;
+    color: #1a365d;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #1a365d;
+    margin: 0 0 8px 0;
+  }
+  .section h2 .accent-dot {
+    display: inline-block;
+    width: 4px;
+    height: 12pt;
+    background-color: #2563eb;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* --- 求职目标 --- */
+  .target-box {
+    background-color: #f0f4fa;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-size: 10pt;
+    color: #1a365d;
+  }
+  .target-box strong {
+    font-weight: 600;
+  }
+
+  /* --- Item：经历/项目/教育 --- */
+  .item {
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+  }
+  .item-header {
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 0 0;
+  }
+  .item-sub {
+    font-size: 9pt;
+    color: #2563eb;
+    font-weight: 500;
+    margin: 0 0 2px 0;
+  }
+  .item-meta {
+    font-size: 8.5pt;
+    color: #888;
+    margin: 0 0 4px 0;
+  }
+  .item p {
+    font-size: 9.5pt;
+    color: #333;
+    margin: 2px 0;
+    line-height: 1.55;
+    word-break: break-word;
+  }
+  .item ul {
+    margin: 3px 0 2px 0;
+    padding-left: 16px;
+  }
+  .item li {
+    font-size: 9pt;
+    color: #444;
+    margin-bottom: 1px;
+    line-height: 1.5;
+  }
+
+  /* --- Summary box --- */
+  .summary-box {
+    background-color: #fafafa;
+    border-left: 3px solid #2563eb;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+    font-size: 9.5pt;
+    color: #333;
+    line-height: 1.6;
+  }
+
+  /* --- Skills 表格排版 --- */
+  .skills-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .skills-table td {
+    padding: 2px 8px 2px 0;
+    font-size: 9pt;
+    vertical-align: top;
+  }
+  .skills-table td.cat {
+    width: 75px;
+    font-weight: 600;
+    color: #1a365d;
+  }
+  .skills-table td.items {
+    color: #333;
+  }
+
+  /* --- 自我评价小标题 --- */
+  .section-footer {
+    text-align: center;
+    margin-top: 24px;
+    color: #ccc;
+    font-size: 7.5pt;
+  }
+
+  /* --- 项目 Tech Stack 标签 --- */
+  .tech-tag {
+    display: inline-block;
+    border: 1px solid #d0d7e2;
+    padding: 1px 7px;
+    font-size: 8pt;
+    color: #1a365d;
+    margin: 1px 2px 1px 0;
+    background-color: #f5f7fa;
+  }
+
+  hr.divider {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 0 0 8px 0;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="resume-container">
+
+    <!-- ====== HEADER: 深色顶栏（含照片区） ====== -->
+    <div class="header-bar">
+      <table>
+        <tr>
+          <td class="name-col">
+            <p class="header-name">张 三</p>
+            <p class="header-title">高级后端工程师 / 技术经理</p>
+            <p class="header-contact">
+              <span>zhangsan@example.com</span>
+              <span>138-0000-0000</span>
+              <span>北京</span>
+            </p>
+          </td>
+          <td class="photo-col">
+            <div class="photo-box">照片粘贴处</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- ====== 正文区 ====== -->
+    <div class="content-area">
+
+      <!-- 求职意向 -->
+      <div class="target-box">
+        <strong>求职目标：</strong>高级后端工程师 / 技术经理 · 互联网 · 北京 · 50K-80K
+      </div>
+
+      <!-- 自我评价 -->
+      <div class="section">
+        <h2><span class="accent-dot"></span>自我评价</h2>
+        <div class="summary-box">
+          8年互联网后端开发经验，主导过日活千万级系统的架构设计与团队管理。擅长高并发分布式系统、微服务架构和团队技术赋能，具备从0到1搭建技术团队的经验。
+        </div>
+      </div>
+
+      <!-- 工作经历 -->
+      <div class="section">
+        <h2><span class="accent-dot"></span>工作经历</h2>
+
+        <div class="item">
+          <p class="item-header">字节跳动 — 后端技术负责人</p>
+          <p class="item-sub">北京 · 2021-03 ~ 至今</p>
+          <p>负责抖音电商核心链路的后端架构与团队管理，带领 15 人技术团队。</p>
+          <ul>
+            <li>设计并落地了新一代订单系统的异地多活架构，系统可用性达 99.99%</li>
+            <li>将核心链路 P99 延迟从 800ms 优化至 120ms</li>
+            <li>推动团队技术债清理，代码测试覆盖率从 35% 提升至 85%</li>
+          </ul>
+        </div>
+
+        <div class="item">
+          <p class="item-header">阿里巴巴 — 高级后端工程师</p>
+          <p class="item-sub">杭州 · 2018-06 ~ 2021-02</p>
+          <p>参与淘宝推荐系统核心服务开发。</p>
+          <ul>
+            <li>主导实时计算管道的重构，数据处理延迟从分钟级降到秒级</li>
+            <li>设计并实现了一套通用的业务监控告警平台，覆盖 200+ 业务指标</li>
+          </ul>
+        </div>
+
+        <div class="item">
+          <p class="item-header">美团 — 后端工程师</p>
+          <p class="item-sub">2015-07 ~ 2018-05</p>
+          <p>参与外卖配送调度系统开发。</p>
+        </div>
+      </div>
+
+      <!-- 项目经历 -->
+      <div class="section">
+        <h2><span class="accent-dot"></span>项目经历</h2>
+
+        <div class="item">
+          <p class="item-header">异地多活订单系统</p>
+          <p class="item-sub">技术负责人 · 2022-01 ~ 2022-12</p>
+          <p>基于 Paxos 协议构建跨机房数据强一致的订单系统，支持单元化流量调度。</p>
+          <p><span class="tech-tag">Java</span><span class="tech-tag">Paxos</span><span class="tech-tag">Kafka</span><span class="tech-tag">Redis</span></p>
+          <ul>
+            <li>支持 3 地 5 中心部署</li>
+            <li>故障切换时间 &lt; 30s</li>
+          </ul>
+        </div>
+
+        <div class="item">
+          <p class="item-header">智能监控告警平台</p>
+          <p class="item-sub">核心开发 · 2020-03 ~ 2020-09</p>
+          <p>通用业务监控平台。</p>
+          <p><span class="tech-tag">Go</span><span class="tech-tag">Prometheus</span><span class="tech-tag">Grafana</span></p>
+        </div>
+      </div>
+
+      <!-- 教育背景 -->
+      <div class="section">
+        <h2><span class="accent-dot"></span>教育背景</h2>
+
+        <div class="item">
+          <p class="item-header">清华大学 — 计算机科学与技术</p>
+          <p class="item-sub">硕士 · 2013-09 ~ 2015-07</p>
+          <p>研究方向：分布式系统与一致性算法。发表 SCI 论文 2 篇。</p>
+        </div>
+
+        <div class="item">
+          <p class="item-header">武汉大学 — 软件工程</p>
+          <p class="item-sub">学士 · 2009-09 ~ 2013-07</p>
+        </div>
+      </div>
+
+      <!-- 专业技能 -->
+      <div class="section">
+        <h2><span class="accent-dot"></span>专业技能</h2>
+        <table class="skills-table">
+          <tr><td class="cat">编程语言</td><td class="items">Java（精通）、Go（精通）、Python（熟练）</td></tr>
+          <tr><td class="cat">技术栈</td><td class="items">Spring Cloud（精通）、Kubernetes（熟练）、Kafka（熟练）</td></tr>
+          <tr><td class="cat">数据库</td><td class="items">MySQL（精通）、Redis（精通）、TiDB（熟练）</td></tr>
+        </table>
+      </div>
+
+      <div class="section-footer">AI Career Copilot · 专业简历</div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ====== 第二页：对比 - 当前模版 ====== -->
+<div class="page">
+  <div style="padding:28px 24px;color:#1a365d;font-size:12pt;font-weight:700;border-bottom:2px solid #1a365d;">
+    📋 新旧对比
+  </div>
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="width:50%;padding:16px;vertical-align:top;border-right:1px solid #e5e7eb;">
+        <p style="font-size:11pt;font-weight:700;color:#2563eb;margin-bottom:8px;">✨ 新版模版</p>
+        <ul style="font-size:9pt;color:#333;line-height:1.8;padding-left:16px;">
+          <li>深色专业顶栏，视觉印象更强</li>
+          <li>工作经历带蓝色副标题（公司+地点+时间）</li>
+          <li>项目技术栈使用标签样式展示</li>
+          <li>自我评价用左边框高亮框展示</li>
+          <li>技能分类用表格排版，更清晰</li>
+          <li>整体层次分明，留白适中</li>
+          <li>求职目标用浅蓝底框突出</li>
+        </ul>
+      </td>
+      <td style="width:50%;padding:16px;vertical-align:top;">
+        <p style="font-size:11pt;font-weight:700;color:#999;margin-bottom:8px;">📦 当前模版</p>
+        <ul style="font-size:9pt;color:#666;line-height:1.8;padding-left:16px;">
+          <li>纯白背景，无顶部设计</li>
+          <li>标题仅为文字加粗</li>
+          <li>技能为纯文本平铺</li>
+          <li>各段落之间缺少区分度</li>
+          <li>项目技术栈混在文字中</li>
+          <li>简历标题「个人简历」占位大</li>
+          <li>整体视觉缺乏层次</li>
+        </ul>
+      </td>
+    </tr>
+  </table>
+  <div style="padding:16px 24px;border-top:1px solid #e5e7eb;">
+    <p style="font-size:9pt;color:#888;">💡 <strong>特点：</strong>新版模版完全兼容 xhtml2pdf 引擎（无 flex/grid，纯 table 布局 + 基本 CSS），
+    同时保持了专业的视觉层次和清晰的信息结构。</p>
+  </div>
+</div>
+
+</body>
+</html>

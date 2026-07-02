@@ -51,7 +51,15 @@ export default function JDAnalysisPage() {
       setResult(data);
       fetchHistory();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || "分析失败，请重试");
+      const detail = err?.response?.data?.detail;
+      if (Array.isArray(detail)) {
+        // Pydantic validation error — extract messages
+        setError(detail.map((e: any) => e.msg).join("; "));
+      } else if (typeof detail === "string") {
+        setError(detail);
+      } else {
+        setError("分析失败，请重试");
+      }
     } finally {
       setIsLoading(false);
     }

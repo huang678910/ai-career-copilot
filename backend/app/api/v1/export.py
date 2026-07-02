@@ -14,38 +14,52 @@ from app.services.resume_service import ResumeService
 
 logger = logging.getLogger(__name__)
 
-_pdf_fonts_registered = False
+_pdf_font_registered = False
+_pdf_font_path = None
 
 
 def _register_pdf_fonts() -> None:
-    """Register Chinese fonts with ReportLab so xhtml2pdf can render CJK text."""
-    global _pdf_fonts_registered
-    if _pdf_fonts_registered:
+    """Register Chinese fonts with ReportLab so xhtml2pdf can render CJK text.
+    Registers each font under TWO names:
+    1. Its real CSS name (e.g. 'Microsoft YaHei') so font-family matching works
+    2. 'CJK' as a universal fallback that the HTML template also references."""
+    global _pdf_font_registered, _pdf_font_path
+    if _pdf_font_registered:
         return
     try:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
-        # Common CJK font locations on Windows / Linux / macOS
         candidates = [
-            # Windows
+            ("C:/Windows/Fonts/simhei.ttf", "SimHei"),
+            ("C:/Windows/Fonts/simfang.ttf", "FangSong"),
             ("C:/Windows/Fonts/msyh.ttc", "Microsoft YaHei"),
             ("C:/Windows/Fonts/simsun.ttc", "SimSun"),
-            # Linux
             ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", "WenQuanYi Micro Hei"),
             ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "Noto Sans CJK SC"),
-            # macOS
             ("/System/Library/Fonts/PingFang.ttc", "PingFang SC"),
-            ("/Library/Fonts/Arial Unicode.ttf", "Arial Unicode MS"),
         ]
         for path, name in candidates:
             if os.path.exists(path):
                 try:
                     pdfmetrics.registerFont(TTFont(name, path, subfontIndex=0))
+                    # Register 'CJK' alias so the HTML template's font-family always finds it
+                    try:
+                        pdfmetrics.registerFont(TTFont("CJK", path, subfontIndex=0))
+                    except Exception:
+                        pass
+                    _pdf_font_path = path
+                    _pdf_font_registered = True
+                    return
                 except Exception:
                     pass
-        _pdf_fonts_registered = True
+        _pdf_font_registered = True
     except ImportError:
-        pass
+        _pdf_font_registered = True
+
+def _pdf_response(pdf_bytes: bytes, resume_id: str):
+    return StreamingResponse(BytesIO(pdf_bytes), media_type="application/pdf",
+                             headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.pdf"})
+
 
 class ExportRequestBody(PydanticModel):
     chat_messages: Optional[List[dict]] = Field(default=None)
@@ -135,30 +149,48 @@ async def export_pdf_sync(
         resume_data = _build_resume_data(resume)
     if body.chat_messages:
         resume_data["chat_highlights"] = _extract_chat_highlights(body.chat_messages)
-    html = build_html_resume(resume_data, template=body.template or "modern")
+    html = build_html_resume(resume_data, template=body.template or "professional")
+
+    # Generate PDF: WeasyPrint first (full CSS support), xhtml2pdf as fallback
+    try:
+        from weasyprint import HTML as WeasyHTML
+        buf = BytesIO()
+        WeasyHTML(string=html).write_pdf(buf)
+        pdf_bytes = buf.getvalue()
+        if pdf_bytes and len(pdf_bytes) >= 100:
+            return _pdf_response(pdf_bytes, resume_id)
+    except Exception:
+        logger.exception("WeasyPrint PDF generation failed, falling back to xhtml2pdf")
+
+    # Fallback: xhtml2pdf (limited CSS support — inline-block, border-left won't render)
     try:
         _register_pdf_fonts()
+
+        # Patch pisaContext so it recognizes the CJK font we registered with reportlab.
+        # pisa's getFontName() only checks its own fontList dict.
+        # Fonts registered via pdfmetrics.registerFont() are invisible to pisa.
+        from xhtml2pdf.context import pisaContext
+        _orig_pisa_init = pisaContext.__init__
+        def _patched_pisa_init(self, *args, **kwargs):
+            _orig_pisa_init(self, *args, **kwargs)
+            self.fontList['CJK'] = 'CJK'
+            self.fontList['WenQuanYi Micro Hei'] = 'WenQuanYi Micro Hei'
+            self.fontList['Microsoft YaHei'] = 'WenQuanYi Micro Hei'
+        pisaContext.__init__ = _patched_pisa_init
+
         from xhtml2pdf import pisa
         buf = BytesIO()
-        pisa_status = pisa.CreatePDF(html, dest=buf, encoding="utf-8")
-        if pisa_status.err:
-            logger.error("xhtml2pdf conversion error: %s", pisa_status.err)
-            raise RuntimeError("PDF conversion failed")
+        result = pisa.CreatePDF(html, dest=buf, encoding="utf-8")
         pdf_bytes = buf.getvalue()
-        if not pdf_bytes or len(pdf_bytes) < 100:
-            raise RuntimeError("Generated PDF is empty or too small")
-        return StreamingResponse(BytesIO(pdf_bytes), media_type="application/pdf",
-                                 headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.pdf"})
-    except ImportError:
-        logger.exception("xhtml2pdf not installed")
-        html_bytes = html.encode("utf-8")
-        return StreamingResponse(BytesIO(html_bytes), media_type="text/html; charset=utf-8",
-                                 headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.html"})
+        if pdf_bytes and len(pdf_bytes) >= 100 and not result.err:
+            return _pdf_response(pdf_bytes, resume_id)
+        logger.error("xhtml2pdf produced invalid PDF: err=%s size=%d", result.err, len(pdf_bytes or b""))
     except Exception:
-        logger.exception("PDF generation failed, falling back to HTML")
-        html_bytes = html.encode("utf-8")
-        return StreamingResponse(BytesIO(html_bytes), media_type="text/html; charset=utf-8",
-                                 headers={"Content-Disposition": f"attachment; filename=resume_{resume_id}.html"})
+        logger.exception("xhtml2pdf crashed")
+
+    # All PDF generators failed — raise clear error
+    from fastapi import HTTPException
+    raise HTTPException(status_code=500, detail="PDF generation failed. Please try DOCX format instead.")
 
 
 @router.post("/resume/{resume_id}/docx/sync")

@@ -127,26 +127,37 @@ class InterviewAgent:
         if not sess:
             return {"error": "Session not found"}
 
-        feedback_prompt = f"""请为以下面试会话生成反馈报告。
+        # Build conversation history
+        conv_lines = []
+        for m in sess["history"][1:]:  # skip system prompt
+            role = m.get("role", "user")
+            content = m.get("content", "")[:300]
+            conv_lines.append(f"{'候选人' if role == 'user' else '面试官'}: {content}")
 
-面试类型：{sess['type']}
-提问数量：{sess['questions_asked']}
-
-面试记录：
-{json.dumps(sess['history'][1:], ensure_ascii=False, indent=2)}
-
-请按JSON格式输出反馈报告。"""
+        from app.ai.prompts.interview import INTERVIEW_FEEDBACK_PROMPT
+        feedback_prompt = INTERVIEW_FEEDBACK_PROMPT.format(
+            conversation_history="\n".join(conv_lines[-40:])
+        )
 
         messages = [
             {"role": "system", "content": INTERVIEW_FEEDBACK_SYSTEM},
             {"role": "user", "content": feedback_prompt},
         ]
-        response = chat(messages, temperature=0.4, max_tokens=4096)
+        response = chat(messages, temperature=0.4, max_tokens=2048,
+                        response_format={"type": "json_object"})
 
         try:
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"raw_feedback": response}
+            import json as _json
+            return _json.loads(response)
+        except Exception:
+            return {
+                "overall_score": 0,
+                "dimension_scores": {},
+                "strengths": [],
+                "improvements": [],
+                "recommendations": [],
+                "raw_feedback": response,
+            }
 
     def get_questions_asked(self, session_id: str) -> int:
         sess = self._sessions.get(session_id)

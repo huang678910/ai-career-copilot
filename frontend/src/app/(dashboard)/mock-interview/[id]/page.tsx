@@ -247,38 +247,92 @@ export default function MockInterviewSessionPage() {
           {interviewComplete && feedback ? (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">面试反馈</CardTitle>
+                <CardTitle className="text-base">面试反馈报告</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {feedback.overall_score && (
-                  <div className="text-center">
-                    <div className="text-3xl font-bold text-primary">{Math.round(feedback.overall_score)}</div>
-                    <p className="text-xs text-muted-foreground">总分</p>
+                {/* Overall Score */}
+                <div className="text-center py-3">
+                  <div className="text-4xl font-bold" style={{
+                    color: (feedback.overall_score || 0) >= 70 ? "#16a34a" :
+                           (feedback.overall_score || 0) >= 50 ? "#d97706" : "#dc2626"
+                  }}>
+                    {feedback.overall_score || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">面试总分</p>
+                </div>
+
+                {/* Dimension Scores */}
+                {feedback.dimension_scores && Object.keys(feedback.dimension_scores).length > 0 && (
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold">各维度评分</h4>
+                    {(Object.entries(feedback.dimension_scores) as [string, number][]).map(([key, score]) => (
+                      <div key={key} className="flex items-center gap-2">
+                        <span className="text-xs w-20 text-muted-foreground">{
+                          {technical: "技术能力", project: "项目经验", communication: "沟通表达",
+                           problem_solving: "问题解决", learning_ability: "学习能力"}[key] || key
+                        }</span>
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{
+                            width: `${score}%`,
+                            background: score >= 70 ? "#16a34a" : score >= 50 ? "#d97706" : "#dc2626"
+                          }} />
+                        </div>
+                        <span className="text-xs font-medium w-8 text-right">{score}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
+
+                {/* Strengths */}
                 {feedback.strengths?.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-emerald-600">优势</h4>
-                    <ul className="mt-1 space-y-1">
+                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950 p-3">
+                    <h4 className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 mb-2">优势分析</h4>
+                    <ul className="space-y-1">
                       {feedback.strengths.map((s: string, i: number) => (
-                        <li key={i} className="text-xs text-muted-foreground">• {s}</li>
+                        <li key={i} className="text-xs flex gap-2">
+                          <span className="text-emerald-500">✓</span>
+                          <span>{s}</span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 )}
+
+                {/* Improvements */}
                 {feedback.improvements?.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-semibold text-amber-600">待改进</h4>
-                    <ul className="mt-1 space-y-1">
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-950 p-3">
+                    <h4 className="text-sm font-semibold text-amber-700 dark:text-amber-400 mb-2">待改进项</h4>
+                    <ul className="space-y-1">
                       {feedback.improvements.map((s: string, i: number) => (
-                        <li key={i} className="text-xs text-muted-foreground">• {s}</li>
+                        <li key={i} className="text-xs flex gap-2">
+                          <span className="text-amber-500">△</span>
+                          <span>{s}</span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 )}
-                {feedback.raw_feedback && (
+
+                {/* Recommendations */}
+                {feedback.recommendations?.length > 0 && (
+                  <div className="rounded-lg bg-blue-50 dark:bg-blue-950 p-3">
+                    <h4 className="text-sm font-semibold text-blue-700 dark:text-blue-400 mb-2">学习建议</h4>
+                    <ul className="space-y-1">
+                      {feedback.recommendations.map((s: string, i: number) => (
+                        <li key={i} className="text-xs flex gap-2">
+                          <span className="text-blue-500">→</span>
+                          <span>{s}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Fallback: raw feedback if structured data missing */}
+                {!feedback.overall_score && feedback.raw_feedback && (
                   <div className="rounded bg-muted p-3 text-xs whitespace-pre-wrap">{feedback.raw_feedback}</div>
                 )}
+
                 <Button variant="outline" size="sm" className="w-full mt-2" onClick={async () => {
                   try {
                     const res = await apiClient.post(`/api/v1/export/interview/${sessionId}/txt`, {}, { responseType: "blob" });

@@ -135,13 +135,21 @@ class GuidedResumeAgent:
                     parsed = self._parse_single_json(cleaned)
                 if parsed:
                     parsed.pop("_meta", None)
-                    # Preserve existing summary — Phase 2 extraction template
-                    # doesn't include "summary", so it would be lost on replace
-                    existing_summary = sess["collected_data"].get("summary")
-                    sess["collected_data"] = parsed
-                    if existing_summary and not parsed.get("summary"):
-                        sess["collected_data"]["summary"] = existing_summary
-                    _log.info("Phase 2 replaced collected_data, keys: %s", list(parsed.keys()))
+                    old_data = sess["collected_data"]
+                    # Defensive merge: LLM may omit sections → keep old data
+                    merged = dict(parsed)
+                    for sec in ORDERED_SECTIONS:
+                        new_val = parsed.get(sec)
+                        if _is_empty_section(new_val):
+                            old_val = old_data.get(sec)
+                            if not _is_empty_section(old_val):
+                                merged[sec] = old_val
+                    # Preserve existing summary (extraction template doesn't include it)
+                    existing_summary = old_data.get("summary")
+                    if existing_summary and not merged.get("summary"):
+                        merged["summary"] = existing_summary
+                    sess["collected_data"] = merged
+                    _log.info("Phase 2 merged collected_data, keys: %s", list(merged.keys()))
                 else:
                     _log.warning("Phase 2 parse FAILED")
             else:
@@ -153,21 +161,24 @@ class GuidedResumeAgent:
         """Derive progress purely from collected_data. No state machine."""
         sess = self._sessions.get(session_id)
         if not sess:
-            return {"completed": [], "collected_data": {}}
+            return {"current_section": "", "completed": [], "collected_data": {}}
 
         collected = sess.get("collected_data", {})
         completed = []
+        current_section = ""
         for sec in ORDERED_SECTIONS:
             data = collected.get(sec)
-            if not data:
-                continue
             if sec in LIST_SECTIONS:
                 if isinstance(data, list) and len(data) > 0:
                     completed.append(sec)
             elif isinstance(data, dict) and any(v for v in data.values() if v):
                 completed.append(sec)
+            else:
+                if not current_section:
+                    current_section = sec  # first unfilled section
 
         return {
+            "current_section": current_section,
             "completed": completed,
             "collected_data": collected,
         }
@@ -295,24 +306,38 @@ class GuidedResumeAgent:
             "Conversation:\n"
             + context + "\n"
             "\n"
-            "Output the COMPLETE updated resume as a single JSON object with ALL 6 sections:\n"
+            "Output the COMPLETE updated resume as a single JSON object:\n"
             '{\n'
             '  "basic_info": {"name": "", "email": "", "phone": "", "city": ""},\n'
             '  "job_target": {"target_position": "", "industry": "", "city": "", "salary": ""},\n'
             '  "education": [{"school": "", "degree": "", "major": "", "start_date": "", "end_date": "", "gpa": "", "description": ""}],\n'
             '  "skills": [{"category": "", "name": "", "level": ""}],\n'
             '  "projects": [{"name": "", "role": "", "start_date": "", "end_date": "", "description": "", "tech_stack": [], "highlights": []}],\n'
-            '  "work_experience": [{"company": "", "title": "", "location": "", "start_date": "", "end_date": "", "description": "", "highlights": []}]\n'
+            '  "work_experience": [{"company": "", "title": "", "location": "", "start_date": "", "end_date": "", "description": "", "highlights": []}],\n'
+            '  "summary": ""\n'
             '}\n'
             "\n"
             "CRITICAL RULES:\n"
             "1. Start from the CURRENT data shown above. For each field:\n"
             "   - If the user just mentioned/changed it → use the new value\n"
             "   - If the user did NOT mention it → COPY the existing value unchanged\n"
-            "2. For list sections (education, skills, projects, work_experience):\n"
-            "   include ALL items — existing items PLUS any new items discussed.\n"
+            "2. For list sections: include ALL items — existing items PLUS new items.\n"
             "3. ONLY fill in data the user explicitly provided. NEVER invent or guess.\n"
-            "4. Empty strings '' and empty arrays [] are valid. Use [] for empty list sections.\n"
+            "4. When the user has completed most sections and the conversation naturally reaches a review phase, "
+            "write a professional self-evaluation summary (2-4 sentences) in the 'summary' field. "
+            "COPY the existing summary if it already exists and the user didn't ask to change it.\n"
+            "5. Empty strings '' and empty arrays [] are valid.\n"
             "\n"
             "Only output the JSON object, no other text."
         )
+
+
+def _is_empty_section(data) -> bool:
+    """Check if a section's data is effectively empty (no user-provided content)."""
+    if not data:
+        return True
+    if isinstance(data, list):
+        return len(data) == 0
+    if isinstance(data, dict):
+        return not any(v for v in data.values() if v)
+    return True

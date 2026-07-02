@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -14,6 +15,11 @@ from app.websocket.manager import manager
 
 router = APIRouter()
 interview_agent = InterviewAgent()
+
+MAX_MSG_LENGTH = 5000  # chars
+MSG_RATE_SECONDS = 1.0  # minimum interval between AI-triggering messages
+_ws_last_msg: dict[str, float] = {}
+MAX_CONNS_PER_USER = 3
 
 
 @router.websocket("/ws/interview/{session_id}")
@@ -31,11 +37,25 @@ async def interview_ws(websocket: WebSocket, session_id: uuid.UUID):
 
     user_id = str(user.id)
     agent_session_id = f"{user_id}:{session_id}"
+
+    # Check connection limit
+    current_conns = len(manager.get_connections(user_id))
+    if current_conns >= MAX_CONNS_PER_USER:
+        await websocket.close(code=4003, reason="Too many connections")
+        return
+
     await manager.connect(user_id, websocket)
 
     try:
         while True:
             raw = await websocket.receive_text()
+
+            # Validate message size
+            if len(raw) > MAX_MSG_LENGTH:
+                await manager.send_personal_message(
+                    {"type": "error", "data": {"message": "消息过长"}}, websocket
+                )
+                continue
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -90,7 +110,10 @@ async def interview_ws(websocket: WebSocket, session_id: uuid.UUID):
                                     "education": [{"school": e.school, "major": e.major, "degree": e.degree} for e in (resume.education or [])],
                                 }
                 except Exception:
-                    pass
+                    import logging
+                    logging.getLogger("interview_ws").warning(
+                        "Failed to load resume data for interview session %s", session_id
+                    )
 
                 interview_agent.start_session(agent_session_id, session_type, questions_total, resume_data)
                 # Stream the first question via executor
@@ -112,6 +135,32 @@ async def interview_ws(websocket: WebSocket, session_id: uuid.UUID):
                 await _sync_counter(user_id, session_id, agent_session_id, websocket)
 
             elif msg_type == "user_answer":
+                # Rate check: prevent rapid-fire AI calls
+                now = time.time()
+                last = _ws_last_msg.get(agent_session_id, 0)
+                if now - last < MSG_RATE_SECONDS:
+                    await manager.send_personal_message(
+                        {"type": "error", "data": {"message": "请稍候再发送"}}, websocket
+                    )
+                    continue
+                _ws_last_msg[agent_session_id] = now
+
+                # Check if interview has reached question limit
+                questions_asked = interview_agent.get_questions_asked(agent_session_id)
+                questions_total = interview_agent._sessions.get(agent_session_id, {}).get("questions_total", 10)
+                if questions_asked >= questions_total:
+                    await manager.send_personal_message(
+                        {"type": "chunk", "data": {"text": "\n\n已达到设定的题目数量，面试即将结束。\n"}}, websocket
+                    )
+                    feedback = interview_agent.generate_feedback(agent_session_id)
+                    await manager.send_personal_message(
+                        {"type": "interview_complete", "data": feedback}, websocket
+                    )
+                    await _save_feedback(session_id, feedback)
+                    interview_agent.end_session(agent_session_id)
+                    await manager.send_personal_message({"type": "done"}, websocket)
+                    continue
+
                 answer = msg.get("data", {}).get("text", "")
                 if not answer.strip():
                     continue
@@ -140,6 +189,15 @@ async def interview_ws(websocket: WebSocket, session_id: uuid.UUID):
                 await _save_message(session_id, "ai", full_text, msg_type_label)
                 await _sync_counter(user_id, session_id, agent_session_id, websocket)
 
+                # Auto-end if AI produced evaluation
+                if is_evaluation:
+                    feedback = interview_agent.generate_feedback(agent_session_id)
+                    await manager.send_personal_message(
+                        {"type": "interview_complete", "data": feedback}, websocket
+                    )
+                    await _save_feedback(session_id, feedback)
+                    interview_agent.end_session(agent_session_id)
+
             elif msg_type == "end_interview":
                 feedback = interview_agent.generate_feedback(agent_session_id)
                 await manager.send_personal_message(
@@ -160,7 +218,10 @@ async def _save_message(session_id: uuid.UUID, role: str, content: str, msg_type
             db.add(msg)
             await db.commit()
     except Exception:
-        pass
+        import logging
+        logging.getLogger("interview_ws").warning(
+            "_save_interview_message failed session=%s", session_id
+        )
 
 
 async def _sync_counter(user_id: str, session_id: uuid.UUID, agent_session_id: str, websocket: WebSocket):
@@ -173,7 +234,10 @@ async def _sync_counter(user_id: str, session_id: uuid.UUID, agent_session_id: s
                 session.questions_asked = count
                 await db.commit()
     except Exception:
-        pass
+        import logging
+        logging.getLogger("interview_ws").warning(
+            "_sync_counter failed session=%s", session_id
+        )
     await manager.send_personal_message(
         {"type": "counter_update", "data": {"questions_asked": count}}, websocket
     )
@@ -191,4 +255,7 @@ async def _save_feedback(session_id: uuid.UUID, feedback: dict):
                 session.feedback = feedback
                 await db.commit()
     except Exception:
-        pass
+        import logging
+        logging.getLogger("interview_ws").warning(
+            "_save_feedback failed session=%s", session_id
+        )
